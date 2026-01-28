@@ -75,7 +75,7 @@ def serve(
                 },
             ),
             types.Tool(
-                name="qdrant-code",
+                name="qdrant-repl",
                 description=(
                     "Execute Python code with a pre-configured QdrantClient. "
                     "Stateful REPL — variables persist between calls. "
@@ -102,7 +102,7 @@ def serve(
     ) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
         nonlocal repl_initialized
 
-        if name not in ["qdrant-store-memory", "qdrant-find-memories", "qdrant-code"]:
+        if name not in ["qdrant-store-memory", "qdrant-find-memories", "qdrant-repl"]:
             raise ValueError(f"Unknown tool: {name}")
 
         if name == "qdrant-store-memory":
@@ -128,7 +128,7 @@ def serve(
                 )
             return content
 
-        if name == "qdrant-code":
+        if name == "qdrant-repl":
             if not arguments or "code" not in arguments:
                 raise ValueError("Missing required argument 'code'")
 
