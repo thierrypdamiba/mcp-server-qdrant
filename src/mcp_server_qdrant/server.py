@@ -30,13 +30,14 @@ def serve(
     """
     server = Server("qdrant")
 
+    # Stateful REPL state
+    repl_globals: dict = {}
+    repl_initialized = False
+
     @server.list_tools()
     async def handle_list_tools() -> list[types.Tool]:
         """
-        Return the list of tools that the server provides. By default, there are two
-        tools: one to store memories and another to find them. Finding the memories is not
-        implemented as a resource, as it requires a query to be passed and resources point
-        to a very specific piece of data.
+        Return the list of tools that the server provides.
         """
         return [
             types.Tool(
@@ -73,13 +74,35 @@ def serve(
                     "required": ["query"],
                 },
             ),
+            types.Tool(
+                name="qdrant-code",
+                description=(
+                    "Execute Python code with a pre-configured QdrantClient. "
+                    "Stateful REPL — variables persist between calls. "
+                    "Pre-configured: client (QdrantClient), models (qdrant_client.models), json. "
+                    "Use for any Qdrant operation: client.get_collections(), "
+                    "client.query_points(...), client.scroll(...), etc."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "code": {
+                            "type": "string",
+                            "description": "Python code to execute. Has `client` (QdrantClient), `models` (qdrant_client.models), and `json` pre-imported.",
+                        }
+                    },
+                    "required": ["code"],
+                },
+            ),
         ]
 
     @server.call_tool()
     async def handle_tool_call(
         name: str, arguments: dict | None
     ) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
-        if name not in ["qdrant-store-memory", "qdrant-find-memories"]:
+        nonlocal repl_initialized
+
+        if name not in ["qdrant-store-memory", "qdrant-find-memories", "qdrant-code"]:
             raise ValueError(f"Unknown tool: {name}")
 
         if name == "qdrant-store-memory":
@@ -104,6 +127,52 @@ def serve(
                     types.TextContent(type="text", text=f"<memory>{memory}</memory>")
                 )
             return content
+
+        if name == "qdrant-code":
+            if not arguments or "code" not in arguments:
+                raise ValueError("Missing required argument 'code'")
+
+            import io
+            import json
+            import traceback
+            from contextlib import redirect_stdout, redirect_stderr
+
+            if not repl_initialized:
+                from qdrant_client import QdrantClient, models as qdrant_models
+                repl_globals["client"] = QdrantClient(
+                    url=qdrant_connector._qdrant_url,
+                    api_key=qdrant_connector._qdrant_api_key,
+                    path=qdrant_connector._qdrant_local_path,
+                ) if qdrant_connector._qdrant_url or qdrant_connector._qdrant_local_path else QdrantClient(":memory:")
+                repl_globals["models"] = qdrant_models
+                repl_globals["json"] = json
+                repl_initialized = True
+
+            code = arguments["code"]
+            stdout_buf = io.StringIO()
+            stderr_buf = io.StringIO()
+
+            try:
+                with redirect_stdout(stdout_buf), redirect_stderr(stderr_buf):
+                    try:
+                        compiled = compile(code, "<qdrant-repl>", "eval")
+                        result = eval(compiled, repl_globals)
+                        if result is not None:
+                            print(repr(result))
+                    except SyntaxError:
+                        exec(compile(code, "<qdrant-repl>", "exec"), repl_globals)
+            except Exception:
+                stderr_buf.write(traceback.format_exc())
+
+            output = stdout_buf.getvalue()
+            errors = stderr_buf.getvalue()
+
+            if errors:
+                text = f"STDOUT:\n{output}\nSTDERR:\n{errors}" if output else f"ERROR:\n{errors}"
+            else:
+                text = output if output else "(no output)"
+
+            return [types.TextContent(type="text", text=text)]
 
         raise ValueError(f"Unknown tool: {name}")
 

@@ -26,6 +26,7 @@ class QdrantConnector:
     ):
         self._qdrant_url = qdrant_url.rstrip("/") if qdrant_url else None
         self._qdrant_api_key = qdrant_api_key
+        self._qdrant_local_path = qdrant_local_path
         self._collection_name = collection_name
         self._embedding_provider = embedding_provider
         self._client = AsyncQdrantClient(
