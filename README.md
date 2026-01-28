@@ -99,6 +99,10 @@ Variables persist between calls, so agents build up context incrementally.
 - `EMBEDDING_MODEL`: Embedding model (default: `sentence-transformers/all-MiniLM-L6-v2`)
 - `QDRANT_LOCAL_PATH`: Path for local Qdrant mode
 
+## Read More
+
+[How to Teach AI Agents to Use Qdrant Without Breaking Things](https://qdrant.tech/blog/qdrant-ai-coding-agents/)
+
 ## License
 
 Apache License 2.0
